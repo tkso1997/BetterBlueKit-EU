@@ -1,13 +1,10 @@
-// 
+// Working
 //  HyundaiEUAPIClient.swift
 //  BetterBlueKit
 //
 //  Created by BetterBlueKit Contributors
-//  Hyundai EU API Client Implementation 
-
-//  supported features: get vehicle informatins plus lock/unlock, start/stop climate, set target SOC  
-
-//  limitations: only tested with Ioniq 5 2025 
+//  Hyundai EU API Client Implementation
+//
 
 // swiftlint:disable all
 
@@ -844,6 +841,10 @@ private struct HyundaiEUStatusParser {
         let targetSoC = chargingInfo["TargetSoC"] as? [String: Any]
         let chargeLimit = targetSoC?["Standard"] as? Int
 
+        // Extract estimated charging time (Standard = AC/Wallbox charging)
+        let estimatedTime = chargingInfo["EstimatedTime"] as? [String: Any]
+        let estimatedChargingTime = estimatedTime?["Standard"] as? Int
+
         let drivetrain = statusData["Drivetrain"] as? [String: Any] ?? [:]
         let fuelSystem = drivetrain["FuelSystem"] as? [String: Any] ?? [:]
         let dte = fuelSystem["DTE"] as? [String: Any] ?? [:]
@@ -858,7 +859,8 @@ private struct HyundaiEUStatusParser {
                 range: Distance(length: Double(total), units: rangeUnit),
                 percentage: ratio
             ),
-            chargeLimit: chargeLimit
+            chargeLimit: chargeLimit,
+            estimatedChargingTime: estimatedChargingTime
         )
     }
 
@@ -882,7 +884,8 @@ private struct HyundaiEUStatusParser {
                 range: Distance(length: rangeValue, units: .kilometers),
                 percentage: Double(batteryStatus)
             ),
-            chargeLimit: nil  // Standard protocol doesn't provide charge limit info
+            chargeLimit: nil,  // Standard protocol doesn't provide charge limit info
+            estimatedChargingTime: nil  // Standard protocol doesn't provide estimated time
         )
     }
 
