@@ -24,18 +24,21 @@ public struct VehicleStatus: Codable, Sendable {
     public struct EVStatus: Codable, Sendable {
         public var charging: Bool, chargeSpeed: Double
         public var pluggedIn: Bool, evRange: FuelRange
-        public var chargeLimit: Int?  // ← NEU: Target State of Charge limit (50-100)
+        public var chargeLimit: Int?  // Target State of Charge limit (50-100)
+        public var estimatedChargingTime: Int?  // Estimated minutes until target SOC is reached
 
         public init(
             charging: Bool,
             chargeSpeed: Double,
             pluggedIn: Bool,
             evRange: FuelRange,
-            chargeLimit: Int? = nil  // ← NEU: Optional parameter
+            chargeLimit: Int? = nil,
+            estimatedChargingTime: Int? = nil
         ) {
             (self.charging, self.chargeSpeed, self.pluggedIn, self.evRange) =
                 (charging, chargeSpeed, pluggedIn, evRange)
-            self.chargeLimit = chargeLimit  // ← NEU
+            self.chargeLimit = chargeLimit
+            self.estimatedChargingTime = estimatedChargingTime
         }
     }
 
