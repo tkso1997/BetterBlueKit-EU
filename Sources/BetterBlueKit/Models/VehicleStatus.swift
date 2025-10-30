@@ -43,6 +43,12 @@ public struct VehicleStatus: Codable, Sendable {
     }
 
     public var evStatus: EVStatus?
+
+    // Battery and consumption info
+    public var batteryHealth: Int?  // SOH - State of Health (0-100%)
+    public var battery12V: Int?  // 12V auxiliary battery level (0-100%)
+    public var averageConsumption: Double?  // Average consumption (e.g., kWh/100km)
+
     public struct Location: Codable, Sendable, Equatable {
         public var latitude: Double, longitude: Double
         public init(latitude: Double, longitude: Double) {
@@ -75,11 +81,23 @@ public struct VehicleStatus: Codable, Sendable {
 
     public var climateStatus: ClimateStatus, odometer: Distance?
 
-    public init(vin: String, gasRange: FuelRange? = nil, evStatus: EVStatus? = nil,
-                location: Location, lockStatus: LockStatus, climateStatus: ClimateStatus,
-                odometer: Distance? = nil, syncDate: Date? = nil) {
+    public init(
+        vin: String,
+        gasRange: FuelRange? = nil,
+        evStatus: EVStatus? = nil,
+        location: Location,
+        lockStatus: LockStatus,
+        climateStatus: ClimateStatus,
+        odometer: Distance? = nil,
+        syncDate: Date? = nil,
+        batteryHealth: Int? = nil,
+        battery12V: Int? = nil,
+        averageConsumption: Double? = nil
+    ) {
         (self.vin, self.gasRange, self.evStatus, self.location) = (vin, gasRange, evStatus, location)
         (self.lockStatus, self.climateStatus, self.odometer, self.syncDate) =
             (lockStatus, climateStatus, odometer, syncDate)
+        (self.batteryHealth, self.battery12V, self.averageConsumption) =
+            (batteryHealth, battery12V, averageConsumption)
     }
 }
