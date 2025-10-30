@@ -772,7 +772,10 @@ public final class HyundaiEUAPIEndpointProvider: APIEndpointProvider, @unchecked
             lockStatus: parser.parseLockStatus(),
             climateStatus: parser.parseClimateStatus(),
             odometer: parser.parseOdometer(),
-            syncDate: parser.parseSyncDate()
+            syncDate: parser.parseSyncDate(),
+            batteryHealth: parser.parseBatteryHealth(),
+            battery12V: parser.parseBattery12V(),
+            averageConsumption: parser.parseAverageConsumption()
         )
     }
 
@@ -997,6 +1000,41 @@ private struct HyundaiEUStatusParser {
             formatter.timeZone = TimeZone(secondsFromGMT: 0)
             return formatter.date(from: timeString)
         }
+    }
+
+    func parseBatteryHealth() -> Int? {
+        // Only available for CCS2 (Gen 2+) EVs
+        guard isCCS2, vehicle.isElectric else { return nil }
+
+        guard let green = statusData["Green"] as? [String: Any],
+              let batteryMgmt = green["BatteryManagement"] as? [String: Any],
+              let soh = batteryMgmt["SoH"] as? [String: Any],
+              let ratio = soh["Ratio"] as? Int else { return nil }
+
+        return ratio
+    }
+
+    func parseBattery12V() -> Int? {
+        // Only available for CCS2 (Gen 2+)
+        guard isCCS2 else { return nil }
+
+        guard let electronics = statusData["Electronics"] as? [String: Any],
+              let battery = electronics["Battery"] as? [String: Any],
+              let level = battery["Level"] as? Int else { return nil }
+
+        return level
+    }
+
+    func parseAverageConsumption() -> Double? {
+        // Only available for CCS2 (Gen 2+)
+        guard isCCS2 else { return nil }
+
+        guard let drivetrain = statusData["Drivetrain"] as? [String: Any],
+              let fuelSystem = drivetrain["FuelSystem"] as? [String: Any],
+              let avgFuelEconomy = fuelSystem["AverageFuelEconomy"] as? [String: Any],
+              let accumulated = avgFuelEconomy["Accumulated"] as? Double else { return nil }
+
+        return accumulated
     }
 }
 
