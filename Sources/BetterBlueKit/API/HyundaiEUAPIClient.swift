@@ -249,6 +249,7 @@ public final class HyundaiEUAPIEndpointProvider: APIEndpointProvider, @unchecked
     // MARK: - Public Command Methods
 
     public func sendLockUnlockCommand(for vehicle: Vehicle, command: VehicleCommand, authToken: AuthToken) async throws {
+        try await ensureDeviceRegistered()  // Auto-register device
         let commandName = switch command {
         case .lock: "LOCK"
         case .unlock: "UNLOCK"
@@ -258,6 +259,7 @@ public final class HyundaiEUAPIEndpointProvider: APIEndpointProvider, @unchecked
     }
 
     public func sendClimateCommand(for vehicle: Vehicle, command: VehicleCommand, authToken: AuthToken) async throws {
+        try await ensureDeviceRegistered()  // Auto-register device
         let commandName = switch command {
         case .startClimate: "START CLIMATE"
         case .stopClimate: "STOP CLIMATE"
@@ -267,6 +269,7 @@ public final class HyundaiEUAPIEndpointProvider: APIEndpointProvider, @unchecked
     }
 
     public func sendChargeCommand(for vehicle: Vehicle, command: VehicleCommand, authToken: AuthToken) async throws {
+        try await ensureDeviceRegistered()  // Auto-register device
         let commandName = switch command {
         case .startCharge: "START CHARGE"
         case .stopCharge: "STOP CHARGE"
@@ -276,6 +279,7 @@ public final class HyundaiEUAPIEndpointProvider: APIEndpointProvider, @unchecked
     }
 
     public func setChargeLimit(for vehicle: Vehicle, targetSOC: Int, authToken: AuthToken) async throws {
+        try await ensureDeviceRegistered()  // Auto-register device
         guard targetSOC >= 50 && targetSOC <= 100 else {
             throw HyundaiKiaAPIError(message: "Charge limit must be between 50 and 100", apiName: "HyundaiEUAPI")
         }
@@ -479,7 +483,33 @@ private struct HyundaiEUStatusParser {
         guard let ratio = batteryMgmt.dict("BatteryRemain").double("Ratio") else { return nil }
 
         let chargingInfo = green.dict("ChargingInformation")
-        let isCharging = (chargingInfo.dict("Charging").int("RemainTime") ?? 0) > 0
+        let charging = chargingInfo.dict("Charging")
+        let isCharging = (charging.int("RemainTime") ?? 0) > 0
+
+        // Parse charge speed (Power in kW)
+        // The API can provide power in different formats:
+        // - "Power" as Double (in kW)
+        // - "Current" and "Voltage" that need to be multiplied and converted
+        let chargeSpeed: Double = {
+            // Try direct power value first
+            if let power = charging.double("Power") {
+                return power
+            }
+
+            // Try Current * Voltage / 1000 (to convert W to kW)
+            if let current = charging.double("Current"),
+               let voltage = charging.double("Voltage") {
+                return (current * voltage) / 1000.0
+            }
+
+            // Check if there's a ChargePower field
+            if let chargePower = charging.double("ChargePower") {
+                return chargePower
+            }
+
+            return 0
+        }()
+
         let isPluggedIn = (green.dict("ChargingDoor").int("State") ?? 2) != 2
         let chargeLimit = chargingInfo.dict("TargetSoC").int("Standard")
         let estimatedChargingTime = chargingInfo.dict("EstimatedTime").int("Standard")
@@ -489,7 +519,7 @@ private struct HyundaiEUStatusParser {
 
         return VehicleStatus.EVStatus(
             charging: isCharging,
-            chargeSpeed: 0,
+            chargeSpeed: chargeSpeed,  // ✅ Now using actual charge speed!
             pluggedIn: isPluggedIn,
             evRange: VehicleStatus.FuelRange(
                 range: Distance(length: Double(total), units: rangeUnit),
@@ -512,9 +542,12 @@ private struct HyundaiEUStatusParser {
             rangeValue = 0
         }
 
+        // Parse charge speed from batteryChargeSpeed (in kW)
+        let chargeSpeed = evStatusData.double("batteryChargeSpeed") ?? 0
+
         return VehicleStatus.EVStatus(
             charging: evStatusData.bool("batteryCharge"),
-            chargeSpeed: 0,
+            chargeSpeed: chargeSpeed,  // ✅ Now using actual charge speed!
             pluggedIn: (evStatusData.int("batteryPlugin") ?? 0) != 0,
             evRange: VehicleStatus.FuelRange(
                 range: Distance(length: rangeValue, units: .kilometers),
