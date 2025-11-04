@@ -489,14 +489,33 @@ private struct HyundaiEUStatusParser {
         // DEBUG: Print all available charging data
         if isCharging {
             print("🔍 [DEBUG] ChargingInformation keys: \(chargingInfo.keys)")
+            print("🔍 [DEBUG] Full ChargingInformation: \(chargingInfo)")
             print("🔍 [DEBUG] Charging keys: \(charging.keys)")
             print("🔍 [DEBUG] Full Charging data: \(charging)")
+
+            // Check ElectricCurrentLevel specifically
+            if let electricLevel = chargingInfo["ElectricCurrentLevel"] {
+                print("🔍 [DEBUG] ElectricCurrentLevel: \(electricLevel)")
+            }
+
+            // Check SequenceDetails
+            if let sequenceDetails = chargingInfo["SequenceDetails"] {
+                print("🔍 [DEBUG] SequenceDetails: \(sequenceDetails)")
+            }
         }
 
-        // Parse charge speed (Power in kW)
-        // The API can provide power in different formats
+        // Parse charge speed from SmartGrid.RealTimePower
+        // Path: Green.Electric.SmartGrid.RealTimePower
         let chargeSpeed: Double = {
-            // Try all possible field names
+            let electric = green.dict("Electric")
+            let smartGrid = electric.dict("SmartGrid")
+
+            if let realTimePower = smartGrid.double("RealTimePower") {
+                print("✅ [DEBUG] Found RealTimePower: \(realTimePower) kW")
+                return realTimePower
+            }
+
+            // Fallback: Try other possible fields
             if let power = charging.double("Power") {
                 print("✅ [DEBUG] Found Power: \(power) kW")
                 return power
@@ -507,23 +526,11 @@ private struct HyundaiEUStatusParser {
                 return chargePower
             }
 
-            if let outputPower = charging.double("OutputPower") {
-                print("✅ [DEBUG] Found OutputPower: \(outputPower) kW")
-                return outputPower
-            }
-
-            // Try Current * Voltage / 1000 (to convert W to kW)
             if let current = charging.double("Current"),
                let voltage = charging.double("Voltage") {
                 let calculatedPower = (current * voltage) / 1000.0
-                print("✅ [DEBUG] Calculated from Current(\(current)) * Voltage(\(voltage)): \(calculatedPower) kW")
+                print("✅ [DEBUG] Calculated from Current/Voltage: \(calculatedPower) kW")
                 return calculatedPower
-            }
-
-            // Check in ChargingInformation level
-            if let power = chargingInfo.double("Power") {
-                print("✅ [DEBUG] Found Power in ChargingInformation: \(power) kW")
-                return power
             }
 
             print("⚠️ [DEBUG] No charge speed found in any field")
