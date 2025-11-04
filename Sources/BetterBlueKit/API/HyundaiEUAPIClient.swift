@@ -486,27 +486,47 @@ private struct HyundaiEUStatusParser {
         let charging = chargingInfo.dict("Charging")
         let isCharging = (charging.int("RemainTime") ?? 0) > 0
 
+        // DEBUG: Print all available charging data
+        if isCharging {
+            print("🔍 [DEBUG] ChargingInformation keys: \(chargingInfo.keys)")
+            print("🔍 [DEBUG] Charging keys: \(charging.keys)")
+            print("🔍 [DEBUG] Full Charging data: \(charging)")
+        }
+
         // Parse charge speed (Power in kW)
-        // The API can provide power in different formats:
-        // - "Power" as Double (in kW)
-        // - "Current" and "Voltage" that need to be multiplied and converted
+        // The API can provide power in different formats
         let chargeSpeed: Double = {
-            // Try direct power value first
+            // Try all possible field names
             if let power = charging.double("Power") {
+                print("✅ [DEBUG] Found Power: \(power) kW")
                 return power
+            }
+
+            if let chargePower = charging.double("ChargePower") {
+                print("✅ [DEBUG] Found ChargePower: \(chargePower) kW")
+                return chargePower
+            }
+
+            if let outputPower = charging.double("OutputPower") {
+                print("✅ [DEBUG] Found OutputPower: \(outputPower) kW")
+                return outputPower
             }
 
             // Try Current * Voltage / 1000 (to convert W to kW)
             if let current = charging.double("Current"),
                let voltage = charging.double("Voltage") {
-                return (current * voltage) / 1000.0
+                let calculatedPower = (current * voltage) / 1000.0
+                print("✅ [DEBUG] Calculated from Current(\(current)) * Voltage(\(voltage)): \(calculatedPower) kW")
+                return calculatedPower
             }
 
-            // Check if there's a ChargePower field
-            if let chargePower = charging.double("ChargePower") {
-                return chargePower
+            // Check in ChargingInformation level
+            if let power = chargingInfo.double("Power") {
+                print("✅ [DEBUG] Found Power in ChargingInformation: \(power) kW")
+                return power
             }
 
+            print("⚠️ [DEBUG] No charge speed found in any field")
             return 0
         }()
 
@@ -517,9 +537,11 @@ private struct HyundaiEUStatusParser {
         let total = dte.int("Total") ?? 0
         let rangeUnit: Distance.Units = (dte.int("Unit") ?? 1) == 1 ? .kilometers : .miles
 
+        print("🔋 [DEBUG] Final charge speed: \(chargeSpeed) kW, charging: \(isCharging)")
+
         return VehicleStatus.EVStatus(
             charging: isCharging,
-            chargeSpeed: chargeSpeed,  // ✅ Now using actual charge speed!
+            chargeSpeed: chargeSpeed,
             pluggedIn: isPluggedIn,
             evRange: VehicleStatus.FuelRange(
                 range: Distance(length: Double(total), units: rangeUnit),
