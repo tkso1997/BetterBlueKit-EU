@@ -484,29 +484,42 @@ private struct HyundaiEUStatusParser {
 
         let chargingInfo = green.dict("ChargingInformation")
         let charging = chargingInfo.dict("Charging")
-        let isCharging = (charging.int("RemainTime") ?? 0) > 0
+
+        // RemainTime is the remaining charging time in minutes
+        let remainTime = charging.int("RemainTime") ?? 0
+
+        // ConnectorFastening.State indicates if plug is connected
+        let connectorState = chargingInfo.dict("ConnectorFastening").int("State") ?? 0
+        let isPluggedIn = connectorState > 0
+
+        // isCharging is true when plug is connected AND remainTime > 0 (matching TypeScript implementation)
+        let isCharging = isPluggedIn && remainTime > 0
 
         // DEBUG: Print all available charging data
-        if isCharging {
-            print("🔍 [DEBUG] ChargingInformation keys: \(chargingInfo.keys)")
-            print("🔍 [DEBUG] Full ChargingInformation: \(chargingInfo)")
-            print("🔍 [DEBUG] Charging keys: \(charging.keys)")
-            print("🔍 [DEBUG] Full Charging data: \(charging)")
+        print("🔋 [DEBUG] ===== CHARGING TIME DEBUG =====")
+        print("🔋 [DEBUG] ConnectorFastening.State: \(connectorState)")
+        print("🔋 [DEBUG] Charging.RemainTime: \(remainTime) minutes")
+        print("🔋 [DEBUG] isPluggedIn: \(isPluggedIn), isCharging: \(isCharging)")
 
-            // Check ElectricCurrentLevel specifically
-            if let electricLevel = chargingInfo["ElectricCurrentLevel"] {
-                print("🔍 [DEBUG] ElectricCurrentLevel: \(electricLevel)")
-            }
-
-            // Check SequenceDetails
-            if let sequenceDetails = chargingInfo["SequenceDetails"] {
-                print("🔍 [DEBUG] SequenceDetails: \(sequenceDetails)")
-            }
+        let estimatedTime = chargingInfo.dict("EstimatedTime")
+        print("🔋 [DEBUG] EstimatedTime dict: \(estimatedTime)")
+        if let standard = estimatedTime.int("Standard") {
+            print("🔋 [DEBUG] EstimatedTime.Standard: \(standard) minutes")
         }
+        if let etc = estimatedTime.int("ETC") {
+            print("🔋 [DEBUG] EstimatedTime.ETC: \(etc) minutes")
+        }
+        if let fast = estimatedTime.int("Fast") {
+            print("🔋 [DEBUG] EstimatedTime.Fast: \(fast) minutes")
+        }
+        print("🔋 [DEBUG] ===== END CHARGING DEBUG =====")
 
-        // Parse charge speed from SmartGrid.RealTimePower
+        // Parse charge speed from SmartGrid.RealTimePower (matching TypeScript implementation)
         // Path: Green.Electric.SmartGrid.RealTimePower
         let chargeSpeed: Double = {
+            // Only check for charging power if actually charging
+            guard isCharging else { return 0 }
+
             let electric = green.dict("Electric")
             let smartGrid = electric.dict("SmartGrid")
 
@@ -515,41 +528,28 @@ private struct HyundaiEUStatusParser {
                 return realTimePower
             }
 
-            // Fallback: Try other possible fields
-            if let power = charging.double("Power") {
-                print("✅ [DEBUG] Found Power: \(power) kW")
-                return power
-            }
-
-            if let chargePower = charging.double("ChargePower") {
-                print("✅ [DEBUG] Found ChargePower: \(chargePower) kW")
-                return chargePower
-            }
-
-            if let current = charging.double("Current"),
-               let voltage = charging.double("Voltage") {
-                let calculatedPower = (current * voltage) / 1000.0
-                print("✅ [DEBUG] Calculated from Current/Voltage: \(calculatedPower) kW")
-                return calculatedPower
-            }
-
-            print("⚠️ [DEBUG] No charge speed found in any field")
+            print("⚠️ [DEBUG] No charge speed found (RealTimePower not available)")
             return 0
         }()
 
-        let isPluggedIn = (green.dict("ChargingDoor").int("State") ?? 2) != 2
+        // Fallback for isPluggedIn: ChargingDoor.State != 2
+        let chargingDoorState = green.dict("ChargingDoor").int("State") ?? 2
+        let isPluggedInFallback = chargingDoorState != 2
+
         let chargeLimit = chargingInfo.dict("TargetSoC").int("Standard")
-        let estimatedChargingTime = chargingInfo.dict("EstimatedTime").int("Standard")
+
+        // Use RemainTime as the estimated charging time (this is the remaining minutes)
+        let estimatedChargingTime: Int? = remainTime > 0 ? remainTime : nil
 
         let total = dte.int("Total") ?? 0
         let rangeUnit: Distance.Units = (dte.int("Unit") ?? 1) == 1 ? .kilometers : .miles
 
-        print("🔋 [DEBUG] Final charge speed: \(chargeSpeed) kW, charging: \(isCharging)")
+        print("🔋 [DEBUG] Final values: chargeSpeed=\(chargeSpeed) kW, charging=\(isCharging), remainTime=\(remainTime) min, pluggedIn=\(isPluggedIn || isPluggedInFallback)")
 
         return VehicleStatus.EVStatus(
             charging: isCharging,
             chargeSpeed: chargeSpeed,
-            pluggedIn: isPluggedIn,
+            pluggedIn: isPluggedIn || isPluggedInFallback,
             evRange: VehicleStatus.FuelRange(
                 range: Distance(length: Double(total), units: rangeUnit),
                 percentage: ratio
